@@ -131,60 +131,14 @@ NTSTATUS DriverDeviceControl(IN OUT PDEVICE_OBJECT DeviceObject, IN OUT PIRP Irp
 			return STATUS_ACCESS_DENIED;
 		}
 
-		if (IoStackLocation->Parameters.DeviceIoControl.OutputBufferLength > sizeof(ULONG))	// Object reference count example
+		NTSTATUS Status = DispatchParser(IoStackLocation->Parameters.DeviceIoControl.OutputBufferLength, Irp);
+		if (NT_SUCCESS(Status) == FALSE)
 		{
-			PHANDLE Pid = (PHANDLE)Irp->AssociatedIrp.SystemBuffer;
-			ShGlobal.TargetProcessId = *Pid;
-			PEPROCESS Process = NULL;
-			NTSTATUS Status = PsLookupProcessByProcessId(*Pid, &Process);
-			if (NT_SUCCESS(Status) == FALSE)
-			{
-				NtErrorHandler("PsLookupProcessByProcessId", Status);
-				IoCompleteRoutine(Irp, Status, 0);
-				return Status;
-			}
-			ObGetObjectType_t ObGetObjectType = (ObGetObjectType_t)GetRoutineAddress(L"ObGetObjectType");
-
-			OBJECT_REF ObjRef = { 0, };
-			ObjRef.ObjectHeader = (PVOID)((DWORD64)Process - 0x30);
-			PULONG RefCount = (PULONG)ObjRef.ObjectHeader;
-
-			PCHAR ProcessName = ShGlobal.PsGetProcessImageFileName(Process);
-
-			Log("Process Name : %s\n", ProcessName);
-			Log("Object : 0x%p\n", Process);
-			Log("ObjectHeader : 0x%p\n", ObjRef.ObjectHeader);
-			Log("Pre-Reference Count : %d\n", *RefCount);
-			ObReferenceObject(Process);
-			Log("Post-Reference Count : %d\n", *RefCount);
-			ObDereferenceObject(Process);
-			ShObject::RegObjectCallback();
-			
-			Status = PsSetLoadImageNotifyRoutine(&ShObject::LoadImageNotifyRoutine);
-			if (NT_SUCCESS(Status) == FALSE)
-			{
-				NtErrorHandler("PsSetLoadImageNotifyRoutine", Status);
-				IoCompleteRoutine(Irp, Status, 0);
-				return Status;
-			}
-			Status = PsSetCreateProcessNotifyRoutine(&ShObject::CreateImageNotifyRoutine, FALSE);
-			if (NT_SUCCESS(Status) == FALSE)
-			{
-				NtErrorHandler("PsSetCreateProcessNotifyRoutine", Status);
-				IoCompleteRoutine(Irp, Status, 0);
-				return Status;
-			}
-			ShGlobal.IsNotifyRoutine = TRUE;
-			IoCompleteRoutine(Irp, STATUS_SUCCESS, 0);
-			return STATUS_SUCCESS;
-
+			IoCompleteRoutine(Irp, Status, 0);
+			return Status;
 		}
-		ULONG* RecvBuffer = (ULONG*)Irp->AssociatedIrp.SystemBuffer;
-		Log("Recv : 0x%X\n", *RecvBuffer);
-		
-		ULONG Buffer = 0xdeadbeef;
-		RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &Buffer, sizeof(ULONG));
-		IoCompleteRoutine(Irp, STATUS_SUCCESS, sizeof(ULONG));
+
+		IoCompleteRoutine(Irp, STATUS_SUCCESS, IoStackLocation->Parameters.DeviceIoControl.OutputBufferLength);	// Ãë¾àÇÔ
 		return STATUS_SUCCESS;
 	}
 	case METHOD_IN_DIRECT:
@@ -257,6 +211,69 @@ NTSTATUS DriverDeviceControl(IN OUT PDEVICE_OBJECT DeviceObject, IN OUT PIRP Irp
 NTSTATUS DriverCleanUp(IN OUT PDEVICE_OBJECT DeviceObject, IN OUT PIRP Irp)
 {
 	IoCompleteRoutine(Irp, STATUS_SUCCESS, 0);
+	return STATUS_SUCCESS;
+}
+
+NTSTATUS DispatchParser(IN SIZE_T Size, IN PIRP Irp)
+{
+	if (Size > sizeof(ULONG))
+	{
+		PHANDLE Pid = (PHANDLE)Irp->AssociatedIrp.SystemBuffer;
+		ShGlobal.TargetProcessId = *Pid;
+		PEPROCESS Process = NULL;
+		NTSTATUS Status = PsLookupProcessByProcessId(*Pid, &Process);
+		if (NT_SUCCESS(Status) == FALSE)
+		{
+			NtErrorHandler("PsLookupProcessByProcessId", Status);
+			return Status;
+		}
+		ObGetObjectType_t ObGetObjectType = (ObGetObjectType_t)GetRoutineAddress(L"ObGetObjectType");
+
+		OBJECT_REF ObjRef = { 0, };
+		ObjRef.ObjectHeader = (PVOID)((DWORD64)Process - 0x30);
+		PULONG RefCount = (PULONG)ObjRef.ObjectHeader;
+
+		PCHAR ProcessName = ShGlobal.PsGetProcessImageFileName(Process);
+
+		Log("Process Name : %s\n", ProcessName);
+		Log("Object : 0x%p\n", Process);
+		Log("ObjectHeader : 0x%p\n", ObjRef.ObjectHeader);
+		Log("Pre-Reference Count : %d\n", *RefCount);
+		ObReferenceObject(Process);
+		Log("Post-Reference Count : %d\n", *RefCount);
+		ObDereferenceObject(Process);
+		CLIENT_ID Cid = { 0, };
+		Cid.UniqueProcess = *Pid;
+
+		HANDLE ProcessHandle = NULL;
+		OBJECT_ATTRIBUTES ObjAttribute = { 0, };
+		ObjAttribute.Length = sizeof(OBJECT_ATTRIBUTES);
+		Log("PID %d\n", *Pid);
+		Status = ZwOpenProcess(
+			&ProcessHandle,
+			NTOPEN_ACCESS,
+			&ObjAttribute,
+			&Cid
+		);
+		if (NT_SUCCESS(Status))
+		{
+			Log("Open Success %X\n", ProcessHandle);
+			NtClose(ProcessHandle);
+		}
+		else {
+			NtErrorHandler("NtOpenProcess", Status);
+		}
+
+		return STATUS_SUCCESS;
+	}
+
+	else
+	{
+		ULONG* RecvBuffer = (ULONG*)Irp->AssociatedIrp.SystemBuffer;
+		Log("Recv : 0x%X\n", *RecvBuffer);
+		ULONG Buffer = 0xdeadbeef;
+		RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &Buffer, sizeof(ULONG));
+	}
 	return STATUS_SUCCESS;
 }
 

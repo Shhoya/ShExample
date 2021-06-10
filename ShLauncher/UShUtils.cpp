@@ -7,7 +7,7 @@ void ShUtils::PrintMenu()
 	printf("[3] DeviceIoControl(SystemBuffer)\n");
 	printf("[4] DeviceIoControl(MDL)\n");
 	printf("[5] DeviceIoControl(UserBuffer)\n");
-	printf("[6] Test Object reference count(SystemBuffer)\n");
+	printf("[6] DebugObject(SystemBuffer)\n");
 	printf("[0] Exit\n");
 }
 
@@ -50,9 +50,9 @@ bool ShUtils::SelParser(int num, ShService* service)
 		break;
 	}
 
-	case ObjectRefCountTest:
+	case DebugObject:
 	{
-		Log("Object reference count test\n");
+		Log("Debug Object test\n");
 		service->SendControl(num);
 		break;
 	}

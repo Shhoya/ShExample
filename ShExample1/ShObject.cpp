@@ -15,7 +15,7 @@ OB_PREOP_CALLBACK_STATUS ShObject::PreCallback(PVOID RegistrationContext, POB_PR
 
 void ShObject::PostCallback(PVOID RegistrationContext, POB_POST_OPERATION_INFORMATION PostOperationInfo)
 {
-
+	
 }
 
 void ShObject::LoadImageNotifyRoutine(IN PUNICODE_STRING FullImageName, IN HANDLE ProcessId, IN PIMAGE_INFO ImageInfo)
@@ -40,7 +40,7 @@ void ShObject::CreateImageNotifyRoutine(HANDLE ParentId, HANDLE ProcessId, BOOLE
 			PVOID ObjectHeader = (PVOID)((DWORD64)Process - 0x30);
 			PULONG RefCount = (PULONG)ObjectHeader;
 			PCHAR ProcessName = ShGlobal.PsGetProcessImageFileName(Process);
-			Log("%s(%d) : %d\n", ProcessName, Create,*RefCount);
+			Log("%s : Create %d\n", ProcessName, Create);
 			
 		}
 	}

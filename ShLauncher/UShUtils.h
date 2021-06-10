@@ -19,7 +19,7 @@ enum MenuSel {
 	DeviceIoControl_SystemBuffer,
 	DeviceIoControl_MDL,
 	DeviceIoControl_UserBuffer,
-	ObjectRefCountTest
+	DebugObject
 };
 
 namespace ShUtils {

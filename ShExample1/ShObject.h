@@ -2,6 +2,7 @@
 #define _SHOBJECT_H_
 
 namespace ShObject {
+
 	OB_PREOP_CALLBACK_STATUS PreCallback(
 		IN PVOID RegistrationContext, 
 		IN POB_PRE_OPERATION_INFORMATION PreOperationInfo

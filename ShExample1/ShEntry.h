@@ -3,12 +3,20 @@
 
 #define DEVICE_NAME		L"\\Device\\ShhoyaDriver"
 #define SYMBOLIC_NAME	L"\\DosDevices\\ShDrv"
-
+#define NTOPEN_ACCESS   (PROCESS_CREATE_THREAD|PROCESS_VM_OPERATION|PROCESS_VM_READ|PROCESS_VM_WRITE|PROCESS_SUSPEND_RESUME|PROCESS_QUERY_INFORMATION)
 
 /*
 * Extern Variable
 */
 extern SH_GLOBAL ShGlobal;
+
+/*
+* Dispatch parser enumeration
+*/
+enum DispatchFunction {
+	SystemBuffer = 3,
+	DebugObject = 6
+};
 
 /*
 * Driver Entry & Driver Unload Routine
@@ -61,6 +69,11 @@ NTSTATUS DriverDeviceControl(
 NTSTATUS DriverCleanUp(
 	IN OUT PDEVICE_OBJECT DeviceObject,
 	IN OUT PIRP Irp
+);
+
+NTSTATUS DispatchParser(
+	IN SIZE_T Size,
+	IN PIRP Irp
 );
 
 /*

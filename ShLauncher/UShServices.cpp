@@ -26,6 +26,7 @@ bool ShService::InitializeService()
         { 
             ErrLog("Can't create(open) service..%d\n", GetLastError());
             CloseHandle(SCManager);
+            
             return false;
         }
     }
@@ -169,7 +170,7 @@ void ShService::SendControl(int mode)
         break;
     }
 
-    case ObjectRefCountTest:
+    case DebugObject:
     {
         ULONG pid = 0;
         OBJECT_REF obTest = { 0, };
