@@ -21,6 +21,11 @@ typedef struct _OBJECT_REF {
 	ULONG RefCount;
 }OBJECT_REF, * POBJECT_REF;
 
+typedef struct _DEBUGGER_INFO {
+	ULONG DebuggerId;
+	ULONG DebuggeeId;
+}DEBUGGER_INFO,*PDEBUGGER_INFO;
+
 class ShService {
 private:
 	SC_HANDLE		SCManager;

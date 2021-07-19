@@ -32,6 +32,16 @@ BOOLEAN IoValidCheck(
 	IN SIZE_T	OutSize
 );
 
+// GetHandleByPid
+VOID GetProcessHandleById(
+	IN HANDLE Pid,
+	OUT PHANDLE ProcessHandle
+);
+
+
+
+VOID ScanDriver();
+
 
 /*
 * Scan bytes functions

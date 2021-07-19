@@ -172,21 +172,22 @@ void ShService::SendControl(int mode)
 
     case DebugObject:
     {
-        ULONG pid = 0;
+        DEBUGGER_INFO pid = { 0, };
         OBJECT_REF obTest = { 0, };
-        std::cout << "[*] Input PID : ";
-        std::cin >> pid;
+
+        pid.DebuggerId = GetCurrentProcessId();
+		std::cout << "[*] Input Debuggee PID : ";
+		std::cin >> pid.DebuggeeId;
 		DeviceIoControl(
 			DeviceHandle,
 			IOCTL_SHD_SYSTEM_BUFFER,
 			&pid,
-			sizeof(ULONG),
+			sizeof(DEBUGGER_INFO),
 			&obTest,
 			sizeof(OBJECT_REF),
 			&ret,
 			nullptr
 		);
-        Log("Object Header : 0x%p Object : 0x%p Type Index : 0x%X\n", obTest.ObjectHeader, obTest.Object, obTest.TypeIndex);
         break;
     }
 

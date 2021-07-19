@@ -30,7 +30,6 @@ NTSTATUS GetModuleInformation(IN PSTR ModuleName, OUT PSYSTEM_MODULE_ENTRY Modul
 	PSYSTEM_MODULE_INFORMATION ModuleInformation = { 0, };
 	RtlInitUnicodeString(&ZwQueryString, L"ZwQuerySystemInformation");
 	NtQuerySystemInformation_t ZwQuerySystemInformation = (NtQuerySystemInformation_t)MmGetSystemRoutineAddress(&ZwQueryString);
-
 	NTSTATUS status = ZwQuerySystemInformation(SystemModuleInformation, &infoLen, 0, &infoLen);
 	if (status == STATUS_INFO_LENGTH_MISMATCH)
 	{
@@ -71,6 +70,145 @@ BOOLEAN IoValidCheck(IN PVOID InBuffer, IN PVOID OutBuffer, IN SIZE_T InSize, IN
 		return FALSE;
 	}
 	return TRUE;
+}
+
+VOID GetProcessHandleById(IN HANDLE Pid, OUT PHANDLE ProcessHandle)
+{
+	CLIENT_ID Cid = { 0, };
+	Cid.UniqueProcess = Pid;
+
+	OBJECT_ATTRIBUTES ObjAttribute = { 0, };
+	ObjAttribute.Length = sizeof(OBJECT_ATTRIBUTES);
+	NTSTATUS Status = ZwOpenProcess(
+		ProcessHandle,
+		NTOPEN_ACCESS,
+		&ObjAttribute,
+		&Cid
+	);
+}
+
+VOID ScanDriver()
+{
+	SYSTEM_MODULE_ENTRY SystemModule = { 0, };
+	if (GetModuleInformation("\\SystemRoot\\System32\\ntoskrnl.exe", &SystemModule) != 0)
+	{
+		Log("Not Found\n");
+		return;
+	}
+
+	PVOID PsLoadedModuleListPtr = ScanBytes(
+		(PSTR)SystemModule.ImageBase,
+		(PSTR)((DWORD64)SystemModule.ImageBase + SystemModule.ImageSize),
+		"48 8D 05 ?? ?? ?? ?? 33 C9 44 8B E1"
+	);
+
+	if (PsLoadedModuleListPtr == nullptr) { Log("Not found pattern\n"); return; }
+	ULONG CalcBytes;
+	RtlCopyMemory(&CalcBytes, (PVOID)((DWORD64)PsLoadedModuleListPtr + 3), 4);
+	PLDR_DATA_TABLE_ENTRY PsLoadedModuleList = (PLDR_DATA_TABLE_ENTRY)((DWORD64)PsLoadedModuleListPtr + 7 + CalcBytes);
+	PLIST_ENTRY Head = (PLIST_ENTRY)PsLoadedModuleList;
+	PLDR_DATA_TABLE_ENTRY TempEntry = (PLDR_DATA_TABLE_ENTRY)PsLoadedModuleList->InLoadOrderLinks.Flink;
+	
+	while ((PLIST_ENTRY)TempEntry != Head)
+	{
+
+		Log("%wZ : 0x%p\n", TempEntry->BaseDllName, TempEntry->DllBase);
+		TempEntry = (PLDR_DATA_TABLE_ENTRY)TempEntry->InLoadOrderLinks.Flink;
+	}
+	
+
+	// Handle Info
+	/*ULONG BufferSize = 0;
+	PVOID Buffer = NULL;
+	
+	NTSTATUS Status = ShGlobal.NtQuerySystemInformation(SystemExtendedHandleInformation, Buffer, BufferSize, &BufferSize);
+	while (Status == STATUS_INFO_LENGTH_MISMATCH)
+	{
+		if (Buffer) { ExFreePool(Buffer); }
+		Buffer = ExAllocatePool(NonPagedPool, BufferSize);
+		Status = ShGlobal.NtQuerySystemInformation(SystemExtendedHandleInformation, Buffer, BufferSize, &BufferSize);
+	}
+	if (Status || !Buffer)
+	{
+		if (Buffer != NULL) { ExFreePool(Buffer); }
+		return;
+	}
+	
+	PSYSTEM_HANDLE_INFORMATION_EX HandleInformation = (PSYSTEM_HANDLE_INFORMATION_EX)Buffer;
+	for (int i = 0; i < HandleInformation->NumberOfHandles; i++)
+	{
+		SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX Entry = HandleInformation->Handles[i];
+		if (i<10)
+		{
+			Log("[%d] 0x%p\n", Entry.UniqueProcessId, Entry.Object);
+		}
+	}
+	ExFreePool(Buffer);*/
+
+	/*SYSTEM_MODULE_ENTRY SystemModule = { 0, };
+	if (GetModuleInformation("\\SystemRoot\\System32\\ntoskrnl.exe", &SystemModule) != 0)
+	{
+		Log("Not Found\n");
+		return;
+	}
+	PVOID PiDDbCacheTablePtr = ScanBytes(
+		(PSTR)SystemModule.ImageBase,
+		(PSTR)((DWORD64)SystemModule.ImageBase + SystemModule.ImageSize),
+		"48 8D 0D ?? ?? ?? ?? 45 33 F6 48 89"
+	);
+	if (PiDDbCacheTablePtr == nullptr)
+	{
+		Log("Not found pattern\n");
+		return;
+	}
+	ULONG CalcBytes = 0;
+	RtlCopyMemory(&CalcBytes, (PVOID)((DWORD64)PiDDbCacheTablePtr + 3), 4);
+	PRTL_AVL_TABLE PiDDBCacheTable = (PRTL_AVL_TABLE)((DWORD64)PiDDbCacheTablePtr + 7 + CalcBytes);
+	PVOID FirstNode = PiDDBCacheTable->BalancedRoot.RightChild;
+
+	_PiDDBCacheEntry* FirstEntry = (PiDDBCacheEntry*)((DWORD64)FirstNode + sizeof(RTL_BALANCED_LINKS));
+	PLIST_ENTRY Head = FirstEntry->List.Flink;
+	PLIST_ENTRY TempList = (PLIST_ENTRY)FirstEntry;
+	int i = 1;
+	while (true)
+	{
+		TempList = TempList->Flink;
+		if (TempList->Flink == Head) { break; }
+		PiDDBCacheEntry* Entry = (PiDDBCacheEntry*)TempList;
+		Log("[0x%X] Name : %wZ Status : 0x%X\n", i, Entry->DriverName, Entry->LoadStatus);
+		i++;
+	}*/
+	 
+
+	/*PVOID PiDDBCacheListPtr = ScanBytes(
+		(PSTR)SystemModule.ImageBase, 
+		(PSTR)((DWORD64)SystemModule.ImageBase + SystemModule.ImageSize), 
+		"48 8D 15 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 48 39 11 75 24"
+	);
+	if (PiDDBCacheListPtr == nullptr)
+	{
+		Log("Not found pattern\n");
+		return;
+	}
+	ULONG CalcBytes = 0;
+	RtlCopyMemory(&CalcBytes, (PVOID)((DWORD64)PiDDBCacheListPtr + 3), 4);
+	PLIST_ENTRY PiDDBCacheList = (LIST_ENTRY*)((DWORD64)PiDDBCacheListPtr + 7 + CalcBytes);
+	PLIST_ENTRY Head = PiDDBCacheList->Flink;
+	PLIST_ENTRY TempList = PiDDBCacheList;
+	int i = 0;
+	while (true)
+	{
+		TempList = TempList->Flink;
+		if (TempList->Flink == Head)
+		{
+			break;
+		}
+		PiDDBCacheEntry* Entry = (PiDDBCacheEntry *)TempList;
+		Log("%p : %wZ : %X\n",Entry, Entry->DriverName, Entry->LoadStatus);
+		i++;
+	}
+	Log("Drivers : %d\n", i);*/
+
 }
 
 VOID NtErrorHandler(PSTR Caller, NTSTATUS Status)

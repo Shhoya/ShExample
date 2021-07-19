@@ -29,7 +29,7 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING Registry
 
 	ShGlobal.DeviceObject->Flags |= DO_BUFFERED_IO;
 	ShGlobal.DeviceObject->Flags |= DO_DIRECT_IO;
-
+	
 	Status = IoCreateSymbolicLink(&LinkName, &DeviceName);
 	if (NT_SUCCESS(Status) == FALSE) { NtErrorHandler("IoCreateSymbolicLink", Status); return Status; }
 
@@ -46,12 +46,14 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING Registry
 	DriverObject->MajorFunction[IRP_MJ_CLEANUP]				= DriverCleanUp;
 
 	ShGlobal.PsGetProcessImageFileName = (PsGetProcessImageFileName_t)GetRoutineAddress(L"PsGetProcessImageFileName");
-	if (ShGlobal.PsGetProcessImageFileName == NULL)
+	ShGlobal.NtQuerySystemInformation = (NtQuerySystemInformation_t)GetRoutineAddress(L"ZwQuerySystemInformation");
+	if (ShGlobal.PsGetProcessImageFileName == NULL || ShGlobal.NtQuerySystemInformation == NULL)
 	{
 		ErrLog("Not found routine address\n");
 		return STATUS_NOT_FOUND;
 	}
 
+	ScanDriver();
 
 	return Status;
 }
@@ -76,6 +78,7 @@ VOID DriverUnload(IN PDRIVER_OBJECT DriverObject)
 		PsRemoveLoadImageNotifyRoutine(&ShObject::LoadImageNotifyRoutine);
 	}
 	PsSetCreateProcessNotifyRoutine(&ShObject::CreateImageNotifyRoutine, TRUE);
+
 	Log("Shh0ya Driver Unload\n");
 	return;
 }
@@ -218,50 +221,49 @@ NTSTATUS DispatchParser(IN SIZE_T Size, IN PIRP Irp)
 {
 	if (Size > sizeof(ULONG))
 	{
-		PHANDLE Pid = (PHANDLE)Irp->AssociatedIrp.SystemBuffer;
-		ShGlobal.TargetProcessId = *Pid;
-		PEPROCESS Process = NULL;
-		NTSTATUS Status = PsLookupProcessByProcessId(*Pid, &Process);
-		if (NT_SUCCESS(Status) == FALSE)
+		PDEBUGGER_INFO Pid = (PDEBUGGER_INFO)Irp->AssociatedIrp.SystemBuffer;
+		ShGlobal.TargetProcessId = (HANDLE)Pid->DebuggeeId;
+		PEPROCESS Debugger = NULL;
+		PEPROCESS Debuggee = NULL;
+
+		if (!NT_SUCCESS(PsLookupProcessByProcessId((HANDLE)Pid->DebuggerId, &Debugger)) ||
+			!NT_SUCCESS(PsLookupProcessByProcessId((HANDLE)Pid->DebuggeeId, &Debuggee))
+			)
 		{
-			NtErrorHandler("PsLookupProcessByProcessId", Status);
-			return Status;
+			ErrLog("PsLookupProcessByProcessId Failed\n");
+			return STATUS_ACCESS_DENIED;
 		}
-		ObGetObjectType_t ObGetObjectType = (ObGetObjectType_t)GetRoutineAddress(L"ObGetObjectType");
+		
+		Log("Debugger : %s\n",ShGlobal.PsGetProcessImageFileName(Debugger));
+		Log("Debuggee : %s\n", ShGlobal.PsGetProcessImageFileName(Debuggee));
 
-		OBJECT_REF ObjRef = { 0, };
-		ObjRef.ObjectHeader = (PVOID)((DWORD64)Process - 0x30);
-		PULONG RefCount = (PULONG)ObjRef.ObjectHeader;
-
-		PCHAR ProcessName = ShGlobal.PsGetProcessImageFileName(Process);
-
-		Log("Process Name : %s\n", ProcessName);
-		Log("Object : 0x%p\n", Process);
-		Log("ObjectHeader : 0x%p\n", ObjRef.ObjectHeader);
-		Log("Pre-Reference Count : %d\n", *RefCount);
-		ObReferenceObject(Process);
-		Log("Post-Reference Count : %d\n", *RefCount);
-		ObDereferenceObject(Process);
-		CLIENT_ID Cid = { 0, };
-		Cid.UniqueProcess = *Pid;
-
-		HANDLE ProcessHandle = NULL;
-		OBJECT_ATTRIBUTES ObjAttribute = { 0, };
-		ObjAttribute.Length = sizeof(OBJECT_ATTRIBUTES);
-		Log("PID %d\n", *Pid);
-		Status = ZwOpenProcess(
-			&ProcessHandle,
-			NTOPEN_ACCESS,
-			&ObjAttribute,
-			&Cid
-		);
-		if (NT_SUCCESS(Status))
+		HANDLE DebuggerHandle = NULL;
+		GetProcessHandleById((HANDLE)Pid->DebuggerId, &DebuggerHandle);
+		HANDLE DebuggeeHandle = NULL;
+		GetProcessHandleById((HANDLE)Pid->DebuggeeId, &DebuggeeHandle);
+		ShGlobal.TargetProcess = Debuggee;
+		if(DebuggerHandle && DebuggeeHandle) 
 		{
-			Log("Open Success %X\n", ProcessHandle);
-			NtClose(ProcessHandle);
+			
+			PVOID Object = NULL;
+			NTSTATUS Stat = ObReferenceObjectByHandleWithTag(DebuggeeHandle, 0x800, *PsProcessType, 0, 'Proc', &Object, 0);
+			
+			if (NT_SUCCESS(Stat))
+			{
+				Log("%p\n", Object);
+				ObDereferenceObjectDeferDeleteWithTag(Object, 'Proc');
+			}
+			else
+			{
+				NtErrorHandler("ObReferenceObjectByHandleWithTag", Stat);
+			}
+			ZwClose(DebuggerHandle);
+			ZwClose(DebuggeeHandle);
 		}
-		else {
-			NtErrorHandler("NtOpenProcess", Status);
+		else
+		{
+			ErrLog("ZwOpen Failed\n");
+			return STATUS_OPEN_FAILED;
 		}
 
 		return STATUS_SUCCESS;
@@ -274,6 +276,7 @@ NTSTATUS DispatchParser(IN SIZE_T Size, IN PIRP Irp)
 		ULONG Buffer = 0xdeadbeef;
 		RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &Buffer, sizeof(ULONG));
 	}
+
 	return STATUS_SUCCESS;
 }
 

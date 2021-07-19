@@ -6,6 +6,8 @@ typedef struct _SH_GLOBAL {
 	PDEVICE_OBJECT				DeviceObject;
 	PVOID						RegistrationHandle;
 	PsGetProcessImageFileName_t PsGetProcessImageFileName;
+	NtQuerySystemInformation_t  NtQuerySystemInformation;
+	PEPROCESS					TargetProcess;
 	HANDLE						TargetProcessId;
 	BOOLEAN						IsNotifyRoutine;
 	ULONG						Index;
@@ -17,5 +19,10 @@ typedef struct _OBJECT_REF {
 	ULONG TypeIndex;
 	ULONG RefCount;
 }OBJECT_REF, * POBJECT_REF;
+
+typedef struct _DEBUGGER_INFO {
+	ULONG DebuggerId;
+	ULONG DebuggeeId;
+}DEBUGGER_INFO, * PDEBUGGER_INFO;
 
 #endif
